@@ -7,6 +7,12 @@
 
 #include "SCSerial.h"
 
+#if __APPLE__
+#include <sys/ioctl.h>
+
+#define IOSSIOSPEED 0x80045402
+#endif
+
 SCSerial::SCSerial()
 {
 	IOTimeOut = 100;
@@ -69,6 +75,13 @@ bool SCSerial::begin(int baudRate, const char* serialPort)
     case 1000000:
         CR_BAUDRATE = B1000000;
         break;
+#else // on macOS termios.h does not define the following baud rates
+    case 500000:
+        CR_BAUDRATE = 500000;
+        break;
+    case 1000000:
+        CR_BAUDRATE = 1000000;
+        break;
 #endif
     default:
         CR_BAUDRATE = B115200;
@@ -87,12 +100,28 @@ bool SCSerial::begin(int baudRate, const char* serialPort)
     curopt.c_cflag |= CLOCAL;//disable modem statuc check
     cfmakeraw(&curopt);//make raw mode
     curopt.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+#ifndef __APPLE__
     if(tcsetattr(fd, TCSANOW, &curopt) == 0){
         return true;
     }else{
 		perror("tcsetattr:");
 		return false;
 	}
+#else
+    // On macOS termios.h defines a max baud rate of B230400.
+    // Higher rates are availble using the IOSSIOSPEED ioctl.
+    cfsetispeed(&curopt, B230400);
+    cfsetospeed(&curopt, B230400);
+    if(tcsetattr(fd, TCSANOW, &curopt) != 0) {
+        perror("tcsetattr:");
+        return false;
+    } else if(ioctl(fd, IOSSIOSPEED, &baudRate) == 0) {
+        return true;
+    } else {
+        perror("ioctl:");
+        return false;
+    }
+#endif
 }
 
 int SCSerial::setBaudRate(int baudRate)
@@ -125,6 +154,16 @@ int SCSerial::setBaudRate(int baudRate)
 #ifndef __APPLE__
     case 500000:
         CR_BAUDRATE = B500000;
+        break;
+    case 1000000:
+        CR_BAUDRATE = B1000000;
+        break;
+#else // on macOS termios.h does not define the following baud rate
+    case 500000:
+        CR_BAUDRATE = 500000;
+        break;
+    case 1000000:
+        CR_BAUDRATE = 1000000;
         break;
 #endif
     default:
