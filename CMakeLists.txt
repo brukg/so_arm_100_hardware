@@ -29,7 +29,7 @@ target_include_directories(
 
 target_link_libraries(${PROJECT_NAME}
   SCServo
-  yaml-cpp
+  yaml-cpp::yaml-cpp
 )
 
 ament_target_dependencies(${PROJECT_NAME}
