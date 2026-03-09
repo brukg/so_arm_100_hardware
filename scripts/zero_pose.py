@@ -11,7 +11,7 @@ class ZeroPoseTest(Node):
         # Create publisher for arm controller
         self.arm_pub = self.create_publisher(
             JointTrajectory, 
-            '/so_100_arm_controller/joint_trajectory', 
+            '/arm_controller/joint_trajectory', 
             10)
             
         # Joint names in order

@@ -40,13 +40,13 @@ class JogTool(Node):
         self.arm_client = ActionClient(
             self,
             FollowJointTrajectory,
-            '/so_100_arm_controller/follow_joint_trajectory'
+            '/arm_controller/follow_joint_trajectory'
         )
         
         # For gripper control
         self.gripper_pub = self.create_publisher(
             JointTrajectory,
-            '/so_100_arm_gripper_controller/commands',
+            '/gripper_controller/commands',
             10)
         
         # For toggling torque
