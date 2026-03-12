@@ -5,7 +5,7 @@
 
 SMS_STS sm_st;
 
-int main(int argc, char **argv)
+int main(int /*argc*/, char ** /*argv*/)
 {
     const char* port = "/dev/ttyUSB0";
     std::cout << "serial:" << port << std::endl;
