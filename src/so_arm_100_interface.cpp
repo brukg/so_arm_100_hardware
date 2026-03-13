@@ -57,6 +57,7 @@ CallbackReturn SOARM100Interface::on_init(const hardware_interface::HardwareComp
     position_states_.resize(num_joints, 0.0);
     velocity_commands_.resize(num_joints, 0.0);
     velocity_states_.resize(num_joints, 0.0);
+    effort_commands_.resize(num_joints, 0.0);
     effort_states_.resize(num_joints, 0.0);
     active_control_mode_.resize(num_joints, 0);  // default to position mode
 
@@ -84,6 +85,8 @@ std::vector<hardware_interface::CommandInterface> SOARM100Interface::export_comm
             info_.joints[i].name, hardware_interface::HW_IF_POSITION, &position_commands_[i]));
         command_interfaces.emplace_back(hardware_interface::CommandInterface(
             info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &velocity_commands_[i]));
+        command_interfaces.emplace_back(hardware_interface::CommandInterface(
+            info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &effort_commands_[i]));
     }
     return command_interfaces;
 }
@@ -200,10 +203,11 @@ hardware_interface::return_type SOARM100Interface::write(const rclcpp::Time & /*
         for (size_t i = 0; i < info_.joints.size(); ++i) {
             uint8_t servo_id = static_cast<uint8_t>(i + 1);
 
-            // Determine desired mode from which command is non-zero
-            // Velocity command takes priority when non-zero
+            // Determine desired mode: effort > velocity > position
             uint8_t desired_mode = 0;  // position
-            if (std::abs(velocity_commands_[i]) > 1e-6) {
+            if (std::abs(effort_commands_[i]) > 1e-6) {
+                desired_mode = 2;  // PWM/torque open-loop
+            } else if (std::abs(velocity_commands_[i]) > 1e-6) {
                 desired_mode = 1;  // velocity closed-loop
             }
 
@@ -216,9 +220,15 @@ hardware_interface::return_type SOARM100Interface::write(const rclcpp::Time & /*
                            "Servo %d switched to mode %d", servo_id, desired_mode);
             }
 
-            if (desired_mode == 1) {
+            if (desired_mode == 2) {
+                // Effort/PWM mode: command is percentage (-100 to 100), PWM range is -1000 to 1000
+                s16 pwm = static_cast<s16>(std::clamp(effort_commands_[i], -100.0, 100.0) * 10.0);
+                if (!st3215_.RegWritePwm(servo_id, pwm)) {
+                    RCLCPP_WARN(rclcpp::get_logger("SOARM100Interface"),
+                               "Failed to write PWM to servo %d", servo_id);
+                }
+            } else if (desired_mode == 1) {
                 // Velocity mode: convert rad/s to servo speed ticks
-                // Servo speed unit: 50 steps/s per tick (4096 steps = 2π rad)
                 s16 speed_ticks = static_cast<s16>(velocity_commands_[i] * 4096.0 / (2.0 * M_PI));
                 if (!st3215_.RegWriteSpe(servo_id, speed_ticks, 50)) {
                     RCLCPP_WARN(rclcpp::get_logger("SOARM100Interface"),
@@ -230,7 +240,7 @@ hardware_interface::return_type SOARM100Interface::write(const rclcpp::Time & /*
                 RCLCPP_DEBUG(rclcpp::get_logger("SOARM100Interface"),
                            "Servo %d command: %.2f rad -> %d ticks",
                            servo_id, position_commands_[i], joint_pos_cmd);
-                if (!st3215_.RegWritePosEx(servo_id, joint_pos_cmd, 4500, 255)) {
+                if (!st3215_.RegWritePosEx(servo_id, joint_pos_cmd, servo_speed_, servo_acceleration_)) {
                     RCLCPP_WARN(rclcpp::get_logger("SOARM100Interface"),
                                "Failed to write position to servo %d", servo_id);
                 }
@@ -437,6 +447,7 @@ void SOARM100Interface::set_torque_enable(bool enable)
                 st3215_.Mode(servo_id, 0);  // Mode 0 = position
                 active_control_mode_[i] = 0;
                 velocity_commands_[i] = 0.0;
+                effort_commands_[i] = 0.0;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
                 // 2. Enable torque

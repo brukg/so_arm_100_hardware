@@ -52,6 +52,7 @@ private:
   std::vector<double> position_states_;
   std::vector<double> velocity_commands_;
   std::vector<double> velocity_states_;
+  std::vector<double> effort_commands_;
   std::vector<double> effort_states_;
 
   // Active control mode per joint (0=position, 1=velocity, 2=effort/PWM)
