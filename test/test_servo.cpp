@@ -5,9 +5,20 @@
 
 SMS_STS sm_st;
 
-int main(int /*argc*/, char ** /*argv*/)
+int main(int argc, char ** argv)
 {
     const char* port = "/dev/ttyUSB0";
+
+    // First optional positional argument is the serial port
+    if (argc > 1) {
+        port = argv[1];
+    }
+    if (argc > 2) {
+        std::cout << "Invalid argument [" << argv[2] << "]. "
+                  << "Expect one optional argument [serial_port]"
+                  << std::endl;
+        return -1;
+    }
     std::cout << "serial:" << port << std::endl;
     
     if(!sm_st.begin(1000000, port)){
@@ -51,4 +62,4 @@ int main(int /*argc*/, char ** /*argv*/)
 
     sm_st.end();
     return 0;
-} 
+}

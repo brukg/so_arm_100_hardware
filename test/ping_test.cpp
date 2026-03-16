@@ -5,14 +5,25 @@
 
 SMS_STS sm_st;
 
-int main(int /*argc*/, char ** /*argv*/)
+int main(int argc, char ** argv)
 {
     const char* port = "/dev/ttyUSB0";  // Use absolute path
-    std::cout<<"serial:"<<port<<std::endl;
-    
+
+    // First optional positional argument is the serial port
+    if (argc > 1) {
+        port = argv[1];
+    }
+    if (argc > 2) {
+        std::cout << "Invalid argument [" << argv[2] << "]. "
+                  << "Expect one optional argument [serial_port]"
+                  << std::endl;
+        return -1;
+    }
+    std::cout << "serial: " << port << std::endl;
+
     if(!sm_st.begin(1000000, port)){
         std::cout<<"Failed to init sms/sts motor!"<<std::endl;
-        return 0;
+        return -1;
     }
     
     // Add delay after initialization
@@ -27,9 +38,9 @@ int main(int /*argc*/, char ** /*argv*/)
     }else{
         std::cout<<"Ping servo ID error!"<<std::endl;
     }
-    
+
     // Add delay before end
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     sm_st.end();
-    return 1;
-} 
+    return 0;
+}
