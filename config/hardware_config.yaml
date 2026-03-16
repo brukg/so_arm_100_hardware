@@ -6,3 +6,4 @@ so_arm_100_hardware:
     servo_speed: 2400
     servo_acceleration: 50
     calibration_file: "$(find so_arm_100_hardware)/config/calibration.yaml"
+    control_mode: 0
