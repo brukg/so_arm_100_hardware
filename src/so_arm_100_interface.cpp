@@ -128,11 +128,18 @@ hardware_interface::return_type SOARM100Interface::perform_command_mode_switch(
 
                 if (active_control_mode_[i] != new_mode) {
                     uint8_t servo_id = static_cast<uint8_t>(i + 1);
-                    st3215_.Mode(servo_id, new_mode);
-                    active_control_mode_[i] = new_mode;
-                    RCLCPP_INFO(rclcpp::get_logger("SOARM100Interface"),
-                               "Servo %d switched to mode %d via controller switch",
-                               servo_id, new_mode);
+                    if (!st3215_.Mode(servo_id, new_mode)) {
+                        RCLCPP_ERROR(rclcpp::get_logger("SOARM100Interface"), 
+                                    "Failed to set mode %d for servo %d",
+                                    new_mode, servo_id);
+                        return hardware_interface::return_type::ERROR;
+                    }
+                    else {
+                        active_control_mode_[i] = new_mode;
+                        RCLCPP_INFO(rclcpp::get_logger("SOARM100Interface"),
+                                  "Servo %d switched to mode %d via controller switch",
+                                  servo_id, new_mode);
+                    }
                 }
             }
         }
