@@ -21,7 +21,6 @@ class ZeroPoseTest(Node):
             'Elbow',
             'Wrist_Pitch',
             'Wrist_Roll',
-            'Gripper'
         ]
         
         # Send zero pose after specified delay
