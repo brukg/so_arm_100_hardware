@@ -8,6 +8,7 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <thread>
 #include <sstream>
@@ -292,12 +293,36 @@ hardware_interface::return_type SOARM100Interface::write(const rclcpp::Time & /*
     if (command_publisher_) {
         sensor_msgs::msg::JointState cmd_msg;
         cmd_msg.header.stamp = node_->now();
-        
+
+        // Establish which control modes are active
+        typedef sensor_msgs::msg::JointState::_position_type::value_type value_type;
+        for (size_t i = 0; i < info_.joints.size(); ++i) {
+            if (active_control_mode_[i] == 2 &&
+                cmd_msg.effort.empty()) {
+                cmd_msg.effort.resize(info_.joints.size(),
+                    std::numeric_limits<value_type>::quiet_NaN());
+            } else if (active_control_mode_[i] == 1 &&
+                       cmd_msg.velocity.empty()) {
+                cmd_msg.velocity.resize(info_.joints.size(),
+                    std::numeric_limits<value_type>::quiet_NaN());
+            } else {
+                cmd_msg.position.resize(info_.joints.size(),
+                    std::numeric_limits<value_type>::quiet_NaN());
+            }
+        }
+
+        // Populate commands
         for (size_t i = 0; i < info_.joints.size(); ++i) {
             cmd_msg.name.push_back(info_.joints[i].name);
-            cmd_msg.position.push_back(position_commands_[i]);
+            if (active_control_mode_[i] == 2) {
+                cmd_msg.effort[i] = effort_commands_[i];
+            } else if (active_control_mode_[i] == 1) {
+                cmd_msg.velocity[i] = velocity_commands_[i];
+            } else {
+                cmd_msg.position[i] = position_commands_[i];
+            }
         }
-        
+
         command_publisher_->publish(cmd_msg);
     }
 
