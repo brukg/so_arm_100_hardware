@@ -65,6 +65,7 @@ CallbackReturn SOARM100Interface::on_init(const hardware_interface::HardwareComp
     effort_commands_.resize(num_joints, 0.0);
     effort_states_.resize(num_joints, 0.0);
     active_control_mode_.resize(num_joints, default_control_mode_);
+    servo_position_offsets_.resize(num_joints, 0);
 
     return CallbackReturn::SUCCESS;
 }
@@ -152,6 +153,20 @@ CallbackReturn SOARM100Interface::on_activate(const rclcpp_lifecycle::State & /*
 {
     RCLCPP_INFO(rclcpp::get_logger("SOARM100Interface"), "Activating so_arm_100 hardware interface...");
 
+    // Read the position offset from EPROM
+    auto read_pos_offset = [this](uint8_t servo_id) -> int {
+        int raw_pos_offset = -1;
+        int err = 0;
+        raw_pos_offset = st3215_.readWord(servo_id, SMS_STS_OFS_L);
+        if (raw_pos_offset == -1) {
+            err = 1;
+        }
+        if (!err && (raw_pos_offset&(1<<15))) {
+            raw_pos_offset = -(raw_pos_offset&~(1<<15));
+        }
+        return raw_pos_offset;
+    };
+
     if (use_serial_) {
         if(!st3215_.begin(serial_baudrate_, serial_port_.c_str())) {
             RCLCPP_ERROR(rclcpp::get_logger("SOARM100Interface"), "Failed to initialize motors");
@@ -185,7 +200,13 @@ CallbackReturn SOARM100Interface::on_activate(const rclcpp_lifecycle::State & /*
                 RCLCPP_INFO(rclcpp::get_logger("SOARM100Interface"), 
                            "Servo %d initialized at position %d", servo_id, pos);
             }
-            
+
+            // Read the position offset from servo EPROM.
+            int raw_pos_offset = read_pos_offset(servo_id);
+            RCLCPP_DEBUG(rclcpp::get_logger("SOARM100Interface"),
+                        "Servo %d: raw_pos_offset=%d", servo_id, raw_pos_offset);
+            servo_position_offsets_[i] = raw_pos_offset;
+
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
@@ -331,7 +352,14 @@ hardware_interface::return_type SOARM100Interface::write(const rclcpp::Time & /*
 
 hardware_interface::return_type SOARM100Interface::read(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-    if (use_serial_) {
+  // Apply position offset to the raw position
+  auto apply_pos_offset = [](int pos, int pos_offset) -> int {
+    int homing_offset = pos_offset > 2048 ? 2048 - pos_offset : pos_offset;
+    int offset_pos = (pos - homing_offset) % 4096;
+    return offset_pos;
+  };
+
+  if (use_serial_) {
         for (size_t i = 0; i < info_.joints.size(); ++i) {
             uint8_t servo_id = static_cast<uint8_t>(i + 1);
 
@@ -339,6 +367,11 @@ hardware_interface::return_type SOARM100Interface::read(const rclcpp::Time & /*t
                 // When torque is disabled, only try to read position
                 int raw_pos = st3215_.ReadPos(servo_id);
                 if (raw_pos != -1) {
+                    // Apply position offset in velocity and effort modes
+                    int raw_pos_offset = servo_position_offsets_[i];
+                    if (active_control_mode_[i] != 0 && raw_pos_offset != 0) {
+                        raw_pos = apply_pos_offset(raw_pos, raw_pos_offset);
+                    }
                     position_states_[i] = ticks_to_radians(raw_pos, i);
                 }
                 continue;  // Skip other reads
@@ -348,6 +381,11 @@ hardware_interface::return_type SOARM100Interface::read(const rclcpp::Time & /*t
             // in one serial transaction. Use -1 for subsequent reads to use cached data.
             if (st3215_.FeedBack(servo_id) != -1) {
                 int raw_pos = st3215_.ReadPos(-1);
+                // Apply position offset in velocity and effort modes
+                int raw_pos_offset = servo_position_offsets_[i];
+                if (active_control_mode_[i] != 0 && raw_pos_offset != 0) {
+                    raw_pos = apply_pos_offset(raw_pos, raw_pos_offset);
+                }
                 position_states_[i] = ticks_to_radians(raw_pos, i);
 
                 velocity_states_[i] = st3215_.ReadSpeed(-1) * 2.0 * M_PI / 4096.0;

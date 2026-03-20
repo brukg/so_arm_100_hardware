@@ -93,6 +93,9 @@ private:
   // Default control mode (0=position, 1=velocity, 2=effort/PWM)
   uint8_t default_control_mode_;
 
+  // Servo position offsets in ticks 
+  std::vector<int> servo_position_offsets_;
+
   // Serial communication
   int SerialPort;
   struct termios tty;
